@@ -1,166 +1,147 @@
+#Author: Elijah Cannon
+#West Coast Code Consultants
+#Can be set up to run weekly in task scheduler
+
+Write-Host "Happy Friday! -WC3 IT :)"
+
 Set-ExecutionPolicy -ExecutionPolicy Bypass
-$date = Get-Date -Format "MM/dd/yyyy HH:mm K"
 
 #Install CPU-Z
 $software = "CPUID CPU-Z 1.96";
-$installed = (Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Where { $_.DisplayName -eq $software }) -ne $null
+$installed = $null -ne (Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Where-Object { $_.DisplayName -eq $software })
 If (-Not $installed) {
     Write-Host "Now installing '$software'.";
-    Powershell.exe -ExecutionPolicy Bypass .\CPU-Z\Deploy-CPU-Z.ps1 -DeploymentType "Install" -DeployMode "Silent"
+    Powershell.exe -ExecutionPolicy Bypass '.\CPU-Z\Deploy-CPU-Z.ps1' -DeploymentType "Install" -DeployMode "Silent"
 } else {
     Write-Host "'$software' is installed.";
 }
 
 Write-Host "Generating Reports..."
 
-# Run CPU-Z Processor Benchmark
+# Run CPU Benchmark
 Set-Location -Path "C:\\Program Files\\CPUID\\CPU-Z"
 ./cpuz.exe -bench
-
-# Run CPU-Z Report
-./cpuz.exe -txt=C:\\Users\\%USERNAME%\\Favorites\\WC3\\BenchTest\\cpuz;
-$path = 'C:\Users\' +$env:USERNAME+ '\Favorites\WC3\BenchTest'
-Set-Location -Path $path -PassThru
+Set-Location -Path C:\Users\$env:USERNAME\Favorites\WC3\BenchTest -PassThru
 
 #Generate Disk Report
 Invoke-Expression -Command:"wmic bios get SerialNumber > diskinfo.txt"
-Invoke-Expression -Command:"echo Disk Speeds >> diskinfo.txt"
-Invoke-Expression -Command:"winsat disk -drive c -seq -read > temp.txt"
-Select-String -Path .\temp.txt -Pattern 'MB/s' -SimpleMatch >> diskinfo.txt
-Invoke-Expression -Command:"winsat disk -drive c -seq -write > temp.txt"
-Select-String -Path .\temp.txt -Pattern 'MB/s' -SimpleMatch >> diskinfo.txt
-Invoke-Expression -Command:"findStr 'MB/s' temp.txt >> diskinfo.txt"
+$disks = @()
+(get-WmiObject win32_logicaldisk | Where-Object { $_.DriveType -eq 3 }) | ForEach-Object{
+    $disk = New-Object PSObject -Property @{
+        Name = $_.Name
+        Capacity = [math]::Round($_.Size / 1073741824, 2)
+        FreeSpace = [math]::Round($_.FreeSpace / 1073741824, 2)
+        Used = [string][math]::Round(($_.Size - $_.FreeSpace) / $_.Size * 100, 1)+"%"
+        Read = 0
+        Write = 0
+    }
+    $letter = $disk.Name.Substring(0,1)
+    "Disk $letter Speeds" | Out-File -FilePath .\diskinfo.txt -Append
+    Invoke-Expression -Command:"winsat disk -drive $letter -seq -read > temp.txt"
+    Select-String -Path .\temp.txt -Pattern 'MB/s' -SimpleMatch | Out-File -FilePath .\diskinfo.txt -Append
+    Invoke-Expression -Command:"winsat disk -drive $letter -seq -write > temp.txt"
+    Select-String -Path .\temp.txt -Pattern 'MB/s' -SimpleMatch | Out-File -FilePath .\diskinfo.txt -Append
+    $disks += $disk
+}
+[System.Collections.ArrayList]$disk_read = @()
+[System.Collections.ArrayList]$disk_write = @()
+$path = 'C:\\Users\\' + $env:USERNAME + '\\Favorites\\WC3\\BenchTest\\diskinfo.txt'
+[System.IO.File]::ReadLines($path) | ForEach-Object {
+    if ($_ -clike "*Read*"){
+        $speed = $_.Substring(0,$_.IndexOf("MB/s")).Trim()
+        $speed = [double]$speed.substring($speed.IndexOf("Read")+4).Trim()
+        [void]$disk_read.Add($speed)
+    }
+    if ($_ -clike "*Write*"){
+        $speed = $_.substring(0,$_.IndexOf("MB/s")).Trim()
+        $speed = [double]$speed.substring($speed.IndexOf("Write")+5).Trim()
+        [void]$disk_write.Add($speed)
+    }
+    
+}
+$count = 0
+ForEach ($disk in $disks){
+    $disk.Read = $disk_read[$count]
+    $disk.Write = $disk_write[$count]
+    $count += 1;
+}
 
-$cpu_name = ""
-$cpu_coreSpeed = 0
-$cpu_numCores = 0
 $cpu_benchmark = 0
-
-$ram_size = 0
-$ram_frequency = 0
-
-[System.Collections.ArrayList]$gpu_name = @() #stored in array to handle multiple GPUs
-[System.Collections.ArrayList]$gpu_coreClock = @()
-[System.Collections.ArrayList]$gpu_memClock = @()
-$gpu_count = 0
-
-$dsk_capacity = 0
-$dsk_read = 0
-$dsk_write = 0
-
+$ram_speed = 0
 
 Write-Host "Reading Reports..."
 
-#Get CPU Benchmark
-$filepath = "C:\Program Files\CPUID\CPU-Z\" + $env:COMPUTERNAME + ".txt"
-[string]$line = (Select-String -Path $filepath -Pattern "," -SimpleMatch)
+#Read CPU Benchmark
+$path = "C:\\Program Files\\CPUID\\CPU-Z\\" + $env:COMPUTERNAME + ".txt"
+[string]$line = (Select-String -Path $path -Pattern "," -SimpleMatch)
 $cpu_benchmark = [double]::Parse($line.substring($line.IndexOf(",")+1).replace('"',' ').trim());
 
-#Read Disk Report
-[string]$line = (Select-String -Path diskinfo.txt -Pattern "Read" -SimpleMatch)
-$line = $line.substring($line.IndexOf("Read")+4).Trim();
-$line = $line.Substring(0, $line.IndexOf("MB/s")).Trim();
-$dsk_read = [double]::Parse($line)
-[string]$line = (Select-String -Path diskinfo.txt -Pattern "Write" -SimpleMatch)
-$line = $line.substring($line.IndexOf("Write")+5).Trim();
-$line = $line.Substring(0, $line.IndexOf("MB/s")).Trim();
-$dsk_write = [double]::Parse($line)
-
-#Read CPU-Z Report
-[string]$line = Select-String -Path "cpuz.txt" -Pattern "Specification" -SimpleMatch | select-object -First 1
-$cpu_name = $line.Substring($line.IndexOf("Specification") + "Specification".Length).Trim()
-[string]$line = Select-String -Path "cpuz.txt" -Pattern "Number of adapters" -SimpleMatch
-$gpu_count = [int]$line.Substring($line.IndexOf("Number")).replace("Number of adapters", "").Trim()
-$matches = Select-String -Path "cpuz.txt" -Pattern "Number of sockets" -CaseSensitive
-[int]$cpuCount = $matches.count
-$nameCounter = 0;
-$gpu_coreToggle = $true
-$gpu_memToggle = $true
-
-[System.IO.File]::ReadLines("cpuz.txt") | ForEach-Object { 
-    if ($_ -clike '*Core Speed*'){
-        $cpu_coreSpeed = [double]$_.replace('Core Speed',' ').replace('MHz',' ').Trim()
-    }
-    if ($_ -clike '*Number of cores*'){
-        $cpu_numCores = [int]$_.Substring(0,$_.IndexOf("(")).replace('Number of cores',' ').Trim()
-    }
-    if ($_ -clike '*Memory Size*'){
-        $ram_size = [int]$_.substring(0,$_.IndexOf("GBytes", "")).replace("Memory Size", " ").Trim()
-    }
-    if ($_ -clike '*Memory Frequency*'){
-        $ram_frequency = [double]$_.Substring(0,$_.IndexOf("MHz")).replace("Memory Frequency", " ").Trim()
-    }
-    if ($_ -clike '*Name*'){ 
-        $nameCounter += 1; 
-        if ($nameCounter -gt $gpu_count + $cpuCount){ 
-            [void]$gpu_name.Add($_.replace("Name", "").Trim())
-        }
-    }
-    if ($_ -clike '*Core clock*'){
-        $gpu_coreToggle = ! $gpu_coreToggle
-        if ($gpu_coreToggle){
-            [void]$gpu_coreClock.Add([double]$_.substring(0,$_.IndexOf("MHz")).Replace("Core clock", "").Trim())
-        }
-    }
-    if ($_ -clike '*Memory clock*'){
-        $gpu_memToggle = ! $gpu_memToggle
-        if ($gpu_memToggle){
-            [void]$gpu_memClock.Add([double]$_.substring(0,$_.IndexOf("MHz")).Replace("Memory clock", "").Trim())
-        }
+#Get Data
+$ram_size = (Get-WMIObject -class Win32_PhysicalMemory -ComputerName $env:COMPUTERNAME |
+Measure-Object -Property capacity -Sum | ForEach-Object {[Math]::Round(($_.sum / 1GB),2)})
+$ram = Get-WmiObject win32_physicalmemory | Select-Object Configuredclockspeed
+foreach ($slot in $ram){
+    if ($slot.Configuredclockspeed -gt $ram_speed){
+        $ram_speed = $slot.Configuredclockspeed 
     }
 }
+$cpu_numCores = [int](Get-WmiObject -Class Win32_Processor -Property "NumberOfCores" | Select-Object "NumberOfCores").NumberOfCores
+$cpu_name = [string](Get-WmiObject -Class Win32_Processor -Property "Name" | Select-Object "Name").Name
+$cpu_maxClock = (Get-WmiObject -Class Win32_Processor | Select-Object MaxClockSpeed).MaxClockSpeed
+$serial_number = (Get-WmiObject win32_bios | Select-Object SerialNumber).SerialNumber
+$date = Get-Date -Format "MM/dd/yyyy HH:mm K"
+$graphics = @((Get-WmiObject Win32_VideoController | Select-Object Name).Name)
 
 # Transmit Data
 Write-Host "Posting Data..."
 Write-Host ""
 Write-Host "$env:COMPUTERNAME"
+Write-Host "Serial Number: $serial_number"
 Write-Host "$date"
 Write-Host ""
 Write-Host "CPU Info-"
 Write-Host "$cpu_name"
-Write-Host "Core Speed: $cpu_coreSpeed"
 Write-Host "Cores: $cpu_numCores"
+Write-Host "Core Clock Speed: $cpu_maxClock"
 Write-Host "CPU-Z Benchmark: $cpu_benchmark"
 Write-Host ""
 Write-Host "RAM Info-"
 Write-Host "Memory Size: $ram_size"
-Write-Host "Memory Frequency: $ram_frequency"
+Write-Host "Clock Speed: $ram_speed"
 Write-Host ""
-Write-Host "GPU Info-"
-Write-Host "gpu_count: $gpu_count"
-Write-Host "gpu_name: $gpu_name"
-Write-Host "gpu_coreClock: $gpu_coreClock"
-Write-Host "gpu_memClock: $gpu_memClock"
+Write-Host "GPUs-"
+Write-Host $graphics
 Write-Host ""
-Write-Host "Disk Info-"
-Write-Host "Read Speed (MB/s): $dsk_read"
-Write-Host "Write Speed (MB/s): $dsk_write"
+Write-Host "Disk Drives-"
+Write-Host $disks
 Write-Host ""
 
-$gpu = @{}
-for ($i=0; $i -lt $gpu_count; $i++){
-    $list = @{"Core Clock"=$gpu_coreClock[$i];"Memory Clock"=$gpu_memClock[$i]}
-    $gpu.Add($gpu_name[$i], $list)
+$diskData = @{}
+for ($i=0; $i -lt $disks.Count; $i++){
+    $list = @{"Capacity"=$disk[$i].Capacity;"Used"=$disk[$i].Used;"Read Speed"=$disk[$i].read;"Write Speed"=$disk[$i].write}
+    $diskData.Add($disk[$i].Name, $list)
+}
+
+[System.Collections.ArrayList]$gpus = @()
+foreach ($card in $graphics){
+    [void]$gpus.Add($card)
 }
 
 $data = @{
     "Computer Name" = $env:COMPUTERNAME;
+    "Serial Number" = $serial_number;
     "Timestamp" = $date;
     "CPU" = $cpu_name;
-    "Core Speed" = $cpu_coreSpeed;
     "Cores" = $cpu_numCores;
+    "Core Clock Speed" = $cpu_maxClock;
     "CPU-Z Benchmark" = $cpu_benchmark;
     "RAM Size" = $ram_size;
-    "RAM Frequency" = $ram_frequency;
-    "Disk Read Speed" = $dsk_read;
-    "Disk Write Speed" = $dsk_write;
-    "Graphics Cards" = $gpu;
+    "RAM Clock Speed" = $ram_speed;
+    "Drives" = $diskData;
+    "GPUs" = $gpus;
 }
 
 $data | ConvertTo-Json -Depth 10 | Out-File ".\data.json"
 
 #Remove files we are done using
 Invoke-Expression -Command:"del temp.txt"
-Invoke-Expression -Command:"del cpuz.txt"
-Invoke-Expression -Command:"del diskinfo.txt"
-Invoke-Expression -Command:"del 'C:\\Program Files\\CPUID\\$env:COMPUTERNAME.txt'"
