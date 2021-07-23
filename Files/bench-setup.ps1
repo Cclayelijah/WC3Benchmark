@@ -6,4 +6,4 @@ Invoke-WebRequest -Uri "https://codeload.github.com/Cclayelijah/WC3Benchmark/zip
 Expand-Archive -Path $File -DestinationPath "C:\" -Force
 Remove-Item -Path $File -Force
 Register-ScheduledTask -xml (Get-Content 'C:\WC3Benchmark-main\Files\WC3BenchmarkTask.xml' | Out-String) -TaskName "WC3 Benchmark" -TaskPath "\" -User SYSTEM -Force
-"C:\WC3Benchmark-main\Files\wc3-benchmark.ps1" | Invoke-Expression
+"C:\WC3Benchmark-main\run-benchmark.ps1" | Invoke-Expression
