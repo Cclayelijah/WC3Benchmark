@@ -1,5 +1,4 @@
 Set-ExecutionPolicy -ExecutionPolicy Bypass
-$Url = "https://github.com/Cclayelijah/WC3Benchmark/archive/main.zip"
 $File = "C:\WC3Benchmark.zip"
 New-Item $File -ItemType File -Force
 Invoke-WebRequest -Uri "https://codeload.github.com/Cclayelijah/WC3Benchmark/zip/refs/heads/main?token=AC6UHFKNM6ZKC5B7DLDGDRLA7MIZS" -Headers @{"Authorization"="token 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"} -UseBasicParsing -OutFile "C:\WC3Benchmark.zip"
