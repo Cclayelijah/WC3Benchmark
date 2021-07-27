@@ -3,3 +3,4 @@ A Powershell script that uses CPU_Z to generate a simple computer performance re
 This is where you will find the output data: C:\WC3Benchmark-main\data.json
 
 Setup in one simple step using powershell:
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Cclayelijah/WC3Benchmark/main/Files/bench-setup.ps1" -UseBasicParsing | Invoke-Expression
