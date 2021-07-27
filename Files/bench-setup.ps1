@@ -1,3 +1,6 @@
+# To call from terminal simply run:
+# Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Cclayelijah/WC3Benchmark/main/Files/bench-setup.ps1" -UseBasicParsing | Invoke-Expression
+
 try {
     Set-ExecutionPolicy -ExecutionPolicy Bypass
     $File = "C:\WC3Benchmark.zip"
