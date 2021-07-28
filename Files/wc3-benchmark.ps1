@@ -24,7 +24,10 @@ Set-Location -Path C:\WC3Benchmark-main -PassThru
 
 #Generate Disk Report
 Invoke-Expression -Command:"wmic bios get SerialNumber > diskinfo.txt"
-$types = (Get-PhysicalDisk | Select-Object MediaType).MediaType
+[System.Collections.ArrayList]$types = @()
+Get-PhysicalDisk | Select-Object MediaType | foreach {
+    [void]$types.Add($_.MediaType)
+}
 $count = 0
 $disks = @()
 (get-WmiObject win32_logicaldisk | Where-Object { $_.DriveType -eq 3 }) | ForEach-Object{
