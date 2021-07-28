@@ -24,10 +24,13 @@ Set-Location -Path C:\WC3Benchmark-main -PassThru
 
 #Generate Disk Report
 Invoke-Expression -Command:"wmic bios get SerialNumber > diskinfo.txt"
+$types = (Get-PhysicalDisk | Select-Object MediaType).MediaType
+$count = 0
 $disks = @()
 (get-WmiObject win32_logicaldisk | Where-Object { $_.DriveType -eq 3 }) | ForEach-Object{
     $disk = New-Object PSObject -Property @{
         Name = $_.Name
+        type = $types[$count]
         Capacity = [math]::Round($_.Size / 1073741824, 2)
         FreeSpace = [math]::Round($_.FreeSpace / 1073741824, 2)
         Used = [string][math]::Round(($_.Size - $_.FreeSpace) / $_.Size * 100, 1)+"%"
@@ -41,6 +44,7 @@ $disks = @()
     Invoke-Expression -Command:"winsat disk -drive $letter -seq -write > temp.txt"
     Select-String -Path .\temp.txt -Pattern 'MB/s' -SimpleMatch | Out-File -FilePath .\diskinfo.txt -Append
     $disks += $disk
+    $count += 1
 }
 [System.Collections.ArrayList]$disk_read = @()
 [System.Collections.ArrayList]$disk_write = @()
