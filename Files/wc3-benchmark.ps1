@@ -24,10 +24,7 @@ Set-Location -Path C:\WC3Benchmark-main -PassThru
 
 #Generate Disk Report
 Invoke-Expression -Command:"wmic bios get SerialNumber > diskinfo.txt"
-[System.Collections.ArrayList]$types = @()
-Get-PhysicalDisk | Select-Object MediaType | foreach {
-    [void]$types.Add($_.MediaType)
-}
+$types = (Get-PhysicalDisk | Select-Object MediaType).MediaType
 $count = 0
 $disks = @()
 (get-WmiObject win32_logicaldisk | Where-Object { $_.DriveType -eq 3 }) | ForEach-Object{
@@ -147,7 +144,15 @@ $data = @{
     "GPUs" = $gpus;
 }
 
-$data | ConvertTo-Json -Depth 10 | Out-File ".\data.json"
+$json = $data | ConvertTo-Json -Depth 10
+$json | Out-File ".\data.json"
+$params = @{
+    Uri         = 'https://spreadsheets.google.com/feeds/cells/1mwm9hcjKRWMsT6BOuup6GwvVhcrhMO14I0j6t9IMMaQ/1/public/full?alt=json'
+    Method      = 'POST'
+    Body        = $json
+    ContentType = 'application/json'
+}
+Invoke-RestMethod @params
 
 #Remove files we are done using
 Invoke-Expression -Command:"del temp.txt"
